@@ -1,23 +1,10 @@
 import nltk
 from nltk.corpus import wordnet as wn
-from nltk.corpus import wordnet_ic
-from nltk import word_tokenize
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
 
-# Ensure WordNet is downloaded
-try:
-    wn.synsets('dog')
-except LookupError:
-    nltk.download('wordnet')
-    nltk.download('omw-1.4')
-
-# Try to download information content corpus for similarity
-try:
-    brown_ic = wordnet_ic.ic('ic-brown.dat')
-except LookupError:
-    nltk.download('wordnet_ic')
-    brown_ic = wordnet_ic.ic('ic-brown.dat')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
 
 def get_wordnet_relations(word):
     synsets = wn.synsets(word)
@@ -31,104 +18,41 @@ def get_wordnet_relations(word):
         'definitions': set()
     }
     for syn in synsets:
-        # Synonyms
         for lemma in syn.lemmas():
             results['synonyms'].add(lemma.name())
-            # Antonyms
             for ant in lemma.antonyms():
                 results['antonyms'].add(ant.name())
-        # Hypernyms
         for h in syn.hypernyms():
             for lemma in h.lemmas():
                 results['hypernyms'].add(lemma.name())
-        # Hyponyms
         for h in syn.hyponyms():
             for lemma in h.lemmas():
                 results['hyponyms'].add(lemma.name())
-        # Meronyms
         for m in syn.part_meronyms() + syn.substance_meronyms() + syn.member_meronyms():
             for lemma in m.lemmas():
                 results['meronyms'].add(lemma.name())
-        # Holonyms
         for m in syn.part_holonyms() + syn.substance_holonyms() + syn.member_holonyms():
             for lemma in m.lemmas():
                 results['holonyms'].add(lemma.name())
-        # Definitions
         results['definitions'].add(syn.definition())
     return results
 
 def get_best_synset(word):
-    """Get the most common synset for a word."""
     synsets = wn.synsets(word)
     return synsets[0] if synsets else None
 
 def word_similarity(word1, word2):
-    """Compute semantic similarity between two words using WordNet path similarity."""
     syn1 = get_best_synset(word1)
     syn2 = get_best_synset(word2)
     if syn1 and syn2:
-        # Try several similarity measures, fallback to path_similarity
         sim = syn1.wup_similarity(syn2)
-        if sim is None:
-            sim = syn1.path_similarity(syn2)
-        if sim is None and syn1.pos() == syn2.pos() == 'n':
-            sim = syn1.lin_similarity(syn2, brown_ic)
         return sim if sim is not None else 0.0
     return 0.0
-
-def print_relations(word):
-    relations = get_wordnet_relations(word)
-    print(f"WordNet relations for '{word}':\n")
-    for rel, items in relations.items():
-        print(f"{rel.capitalize()}:")
-        for item in items:
-            print(f"  - {item}")
-        print()
-
-def play_word_association_game():
-    print("\n=== Word Association Game ===")
-    original = input("Enter the original word: ").strip().lower()
-    print(f"You entered: {original}")
-    print("Try to come up with a word related to it!")
-    player_word = input("Your associated word: ").strip().lower()
-
-    # Compute similarity
-    similarity = word_similarity(original, player_word)
-    points = int(similarity * 100) if similarity else 0
-
-    # Get relations for feedback
-    relations = get_wordnet_relations(original)
-    related_words = set()
-    for rel in ['synonyms', 'antonyms', 'hypernyms', 'hyponyms', 'meronyms', 'holonyms']:
-        related_words.update(relations[rel])
-
-    print("\n=== Results ===")
-    print(f"Original word: {original}")
-    print(f"Your word: {player_word}")
-    print(f"Similarity score: {similarity:.2f}")
-    print(f"Points awarded: {points}")
-    print()
-    if player_word in related_words:
-        print("🎉 Great! Your word is directly related via WordNet relations.")
-    elif similarity > 0.7:
-        print("🌟 Excellent! Your word is very close in meaning.")
-    elif similarity > 0.4:
-        print("👍 Good! Your word is somewhat related.")
-    elif similarity > 0:
-        print("🙂 Your word is weakly related.")
-    else:
-        print("❌ No strong relation found. Try again!")
-    print("\nWordNet relations for reference:")
-    for rel, items in relations.items():
-        print(f"{rel.capitalize()}:")
-        for item in items:
-            print(f"  - {item}")
-        print()
 
 class WordNetApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("WordNet Explorer & Association Game")
+        self.root.title("WordNet Explorer")
         self.root.geometry("600x600")
         self.create_widgets()
 
@@ -164,7 +88,7 @@ class WordNetApp:
         self.output = scrolledtext.ScrolledText(self.root, wrap=tk.WORD, width=70, height=20, bg="#f0fff0", fg="#006633")
         self.output.pack(padx=10, pady=10, fill="both", expand=True)
 
-        self.toggle_assoc_entry()  # Set initial state
+        self.toggle_assoc_entry()
 
     def toggle_assoc_entry(self):
         mode = self.mode_var.get()
@@ -195,7 +119,7 @@ class WordNetApp:
                 self.output.insert(tk.END, "\n")
         else:
             if not assoc:
-                messagebox.showerror("Input Error", "Please enter an associated word for the game.")
+                messagebox.showerror("Input Error", "Please enter a word you think is related.")
                 return
             similarity = word_similarity(word, assoc)
             points = int(similarity * 100) if similarity else 0
@@ -203,18 +127,19 @@ class WordNetApp:
             related_words = set()
             for rel in ['synonyms', 'antonyms', 'hypernyms', 'hyponyms', 'meronyms', 'holonyms']:
                 related_words.update(relations[rel])
-            self.output.insert(tk.END, f"Similarity score: {similarity:.2f}\n")
-            self.output.insert(tk.END, f"Points awarded: {points}\n")
+            self.output.insert(tk.END, f"How close is your word?\n")
+            self.output.insert(tk.END, f"Score: {similarity:.2f}\n")
+            self.output.insert(tk.END, f"Points: {points}\n")
             if assoc in related_words:
-                self.output.insert(tk.END, "🎉 Great! Your word is directly related via WordNet relations.\n")
+                self.output.insert(tk.END, "Nice! Your word is directly related.\n")
             elif similarity > 0.7:
-                self.output.insert(tk.END, "🌟 Excellent! Your word is very close in meaning.\n")
+                self.output.insert(tk.END, "Great! Your word means almost the same.\n")
             elif similarity > 0.4:
-                self.output.insert(tk.END, "👍 Good! Your word is somewhat related.\n")
+                self.output.insert(tk.END, "Pretty good! Your word is related.\n")
             elif similarity > 0:
-                self.output.insert(tk.END, "🙂 Your word is weakly related.\n")
+                self.output.insert(tk.END, "Not bad, your word is a little related.\n")
             else:
-                self.output.insert(tk.END, "❌ No strong relation found. Try again!\n")
+                self.output.insert(tk.END, "Sorry, your word isn't really related. Try again!\n")
 
 if __name__ == "__main__":
     root = tk.Tk()
