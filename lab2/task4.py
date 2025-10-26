@@ -18,5 +18,10 @@ if __name__ == "__main__":
 	if len(input_seq.split()) != 4:
 		print("Please enter exactly 4 words.")
 	else:
-		next_words = predict_next_words(input_seq, num_words=2)
-		print(f"Predicted next two words: {next_words}")
+		generated = []
+		current_seq = input_seq
+		for i in range(2):
+			next_word = predict_next_words(current_seq, num_words=1)
+			print(f"Predicted word {i+1}: {next_word}")
+			generated.append(next_word)
+			current_seq = current_seq + " " + next_word
