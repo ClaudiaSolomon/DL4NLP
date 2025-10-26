@@ -1,0 +1,29 @@
+Application: Recipe extraction for cake-baking platforms
+
+Description:
+This application processes written cake recipes and converts them into a structured format that
+can be used by recipe websites, kitchen assistants, or automated kitchen equipment. The system
+extracts ingredients with quantities, cooking actions, tools, temperatures, and timing from free‑
+text instructions. The output is a clear step-by-step workflow, a shopping list, and automated
+timers for each cooking step.
+
+Why syntactic and dependency parsing are needed:
+- Constituency parsing (phrase structure) identifies meaningful chunks such as ingredient
+  phrases (e.g., "two large eggs", "250 g flour") and action phrases (e.g., "beat until fluffy").
+- Dependency parsing reveals grammatical relations between words: which verb applies to which
+  ingredient or tool (for example, "fold in the flour" links the action "fold" to the object
+  "flour"). Dependency relations also clarify modifiers like duration and temperature
+  (e.g., "bake at 180°C for 30 minutes").
+- Parsing helps detect negation or conditions (e.g., "do not overmix" or "until golden brown"),
+  which are important for correct execution.
+
+How it is used (simple steps):
+1. Run a syntactic and dependency parser on each recipe sentence.
+2. Extract ingredient phrases and normalize quantities and units.
+3. Use dependency relations to link actions with their direct objects, modifiers, and timings.
+4. Build a structured recipe and generate a shopping list, scaled quantities, and timed steps.
+
+Benefits:
+By converting unstructured recipes into structured data, the system enables automated scaling,
+voice-guided cooking, accurate timers, and better search and recommendation features for a cake‑
+baking platform.
