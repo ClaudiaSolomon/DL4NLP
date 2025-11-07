@@ -61,7 +61,7 @@ print(df, "\n")
 print("Vocabulary size (BoW):", len(bow_vectorizer.get_feature_names_out()))
 print("First 10 words in vocabulary:", bow_vectorizer.get_feature_names_out()[:10], "\n")
 
-n_components = 5
+n_components = 3
 print(f"\n=== Latent Semantic Analysis (LSA) with {n_components} components ===")
 
 
