@@ -10,6 +10,9 @@ from gensim import corpora
 from gensim.models import CoherenceModel
 import pyLDAvis
 import pyLDAvis.gensim_models as gensimvis
+from sklearn.preprocessing import normalize
+import plotly.express as px
+from random import shuffle
 
 topics = {
     "plants": ["Lavender", "Cactus", "Rose", "Sunflower", "Chrysanthemum"],
@@ -19,6 +22,7 @@ topics = {
 
 documents = []
 titles = []
+categories = []
 
 for category, pages in topics.items():
     for page in pages:
@@ -26,12 +30,17 @@ for category, pages in topics.items():
             summary = wikipedia.page(page).summary
             documents.append(summary)
             titles.append(page)
+            categories.append(category)
         except Exception as e:
             print(f"Could not fetch page '{page}': {e}")
 
+combined = list(zip(documents, titles, categories))
+shuffle(combined)
+documents, titles, categories = zip(*combined)
+documents, titles, categories = list(documents), list(titles), list(categories)
+
 stemmer = PorterStemmer()
 stop_words = set(ENGLISH_STOP_WORDS)
-
 
 def preprocess(text):
     text = text.lower()
@@ -39,7 +48,6 @@ def preprocess(text):
     tokens = [t for t in text.split() if t not in stop_words and len(t) > 2]
     stems = [stemmer.stem(t) for t in tokens]
     return ' '.join(stems)
-
 
 processed_docs = [preprocess(t) for t in documents]
 
@@ -64,7 +72,6 @@ print("First 10 words in vocabulary:", bow_vectorizer.get_feature_names_out()[:1
 n_components = 3
 print(f"\n=== Latent Semantic Analysis (LSA) with {n_components} components ===")
 
-
 def print_lsa_results(svd_model, vectorizer, name):
     terms = vectorizer.get_feature_names_out()
     explained = svd_model.explained_variance_ratio_.sum()
@@ -78,7 +85,6 @@ def print_lsa_results(svd_model, vectorizer, name):
         top_terms = [terms[idx] for idx in top_idx]
         print(f"Component {i + 1}: {', '.join(top_terms)}")
 
-
 svd_bow = TruncatedSVD(n_components=n_components, random_state=42)
 bow_lsa = svd_bow.fit_transform(bow_matrix)
 print_lsa_results(svd_bow, bow_vectorizer, 'BoW')
@@ -88,7 +94,6 @@ tfidf_lsa = svd_tfidf.fit_transform(tfidf_matrix)
 print_lsa_results(svd_tfidf, tfidf_vectorizer, 'TF-IDF')
 
 print(f"\n=== Non-negative Matrix Factorization (NMF) with {n_components} components ===")
-
 
 def print_nmf_results(nmf_model, components, vectorizer, name):
     terms = vectorizer.get_feature_names_out()
@@ -100,7 +105,6 @@ def print_nmf_results(nmf_model, components, vectorizer, name):
         top_idx = np.argsort(comp)[::-1][:top_n]
         top_terms = [terms[idx] for idx in top_idx]
         print(f"Component {i + 1}: {', '.join(top_terms)}")
-
 
 nmf_bow = NMF(n_components=n_components, random_state=42, init='nndsvda', max_iter=500)
 W_bow = nmf_bow.fit_transform(bow_matrix)
@@ -152,4 +156,110 @@ LDAvis_data = gensimvis.prepare(lda_model, corpus, dictionary)
 pyLDAvis.save_html(LDAvis_data, 'lda_topics_visualization.html')
 print("LDA visualization saved as 'lda_topics_visualization.html'")
 
-print("\nDone: LDA and evaluation metrics computed successfully.")
+# === Coherence for LSA and NMF ===
+def compute_coherence_for_terms(topic_terms, texts, dictionary, measure='c_v'):
+    coherence_model = CoherenceModel(
+        topics=topic_terms,
+        texts=texts,
+        dictionary=dictionary,
+        coherence=measure,
+        processes=1
+    )
+    return coherence_model.get_coherence()
+
+def get_top_terms_per_topic(components, terms, top_n=10):
+    topic_terms = []
+    for comp in components:
+        top_idx = np.argsort(comp)[::-1][:top_n]
+        topic_terms.append([terms[i] for i in top_idx])
+    return topic_terms
+
+lsa_bow_terms = get_top_terms_per_topic(svd_bow.components_, bow_vectorizer.get_feature_names_out())
+lsa_tfidf_terms = get_top_terms_per_topic(svd_tfidf.components_, tfidf_vectorizer.get_feature_names_out())
+nmf_bow_terms = get_top_terms_per_topic(nmf_bow.components_, bow_vectorizer.get_feature_names_out())
+nmf_tfidf_terms = get_top_terms_per_topic(nmf_tfidf.components_, tfidf_vectorizer.get_feature_names_out())
+
+print("\n=== Coherence Scores Across Models ===")
+coh_lsa_bow = compute_coherence_for_terms(lsa_bow_terms, texts, dictionary)
+coh_lsa_tfidf = compute_coherence_for_terms(lsa_tfidf_terms, texts, dictionary)
+coh_nmf_bow = compute_coherence_for_terms(nmf_bow_terms, texts, dictionary)
+coh_nmf_tfidf = compute_coherence_for_terms(nmf_tfidf_terms, texts, dictionary)
+
+print(f"LSA (BoW): {coh_lsa_bow:.4f}")
+print(f"LSA (TF-IDF): {coh_lsa_tfidf:.4f}")
+print(f"NMF (BoW): {coh_nmf_bow:.4f}")
+print(f"NMF (TF-IDF): {coh_nmf_tfidf:.4f}")
+print(f"LDA: {coherence_lda:.4f}")
+
+# Visual comparison
+coherence_scores = {
+    "LSA (BoW)": coh_lsa_bow,
+    "LSA (TF-IDF)": coh_lsa_tfidf,
+    "NMF (BoW)": coh_nmf_bow,
+    "NMF (TF-IDF)": coh_nmf_tfidf,
+    "LDA": coherence_lda
+}
+
+fig = px.bar(
+    x=list(coherence_scores.keys()),
+    y=list(coherence_scores.values()),
+    labels={'x': 'Model', 'y': 'Coherence Score'},
+    title="Topic Coherence Comparison Across Models",
+    color=list(coherence_scores.keys())
+)
+fig.show()
+
+print("\n=== Generating Interactive Scatter Plots (Plotly) ===")
+
+colors = {'plants': 'green', 'cakes': 'orange', 'fish': 'blue'}
+
+def plot_interactive(coords, title, xlab, ylab, zlab):
+    df_plot = pd.DataFrame({
+        'x': coords[:, 0],
+        'y': coords[:, 1],
+        'z': coords[:, 2],
+        'Category': categories,
+        'Title': titles
+    })
+    fig = px.scatter_3d(
+        df_plot,
+        x='x', y='y', z='z',
+        color='Category',
+        color_discrete_map=colors,
+        hover_name='Title',
+        title=title,
+        width=900, height=700
+    )
+    fig.update_traces(marker=dict(size=8, line=dict(width=0.5, color='black')), opacity=0.85)
+    fig.update_layout(
+        scene=dict(
+            xaxis_title=xlab,
+            yaxis_title=ylab,
+            zaxis_title=zlab
+        ),
+        legend_title="Category",
+        template='plotly_white'
+    )
+    fig.show()
+
+lsa_bow_3d = TruncatedSVD(n_components=3, random_state=42).fit_transform(bow_matrix)
+plot_interactive(lsa_bow_3d, "LSA (BoW) - 3D Semantic Projection", "Component 1", "Component 2", "Component 3")
+
+lsa_tfidf_3d = TruncatedSVD(n_components=3, random_state=42).fit_transform(tfidf_matrix)
+plot_interactive(lsa_tfidf_3d, "LSA (TF-IDF) - 3D Semantic Projection", "Component 1", "Component 2", "Component 3")
+
+nmf_bow_3d = normalize(W_bow)[:, :3]
+plot_interactive(nmf_bow_3d, "NMF (BoW) - 3D Topic Clustering", "Topic 1 weight", "Topic 2 weight", "Topic 3 weight")
+
+nmf_tfidf_3d = normalize(W_tfidf)[:, :3]
+plot_interactive(nmf_tfidf_3d, "NMF (TF-IDF) - 3D Topic Clustering", "Topic 1 weight", "Topic 2 weight", "Topic 3 weight")
+
+lda_doc_topics = []
+for doc_bow in corpus:
+    doc_topic = [prob for _, prob in lda_model.get_document_topics(doc_bow, minimum_probability=0)]
+    lda_doc_topics.append(doc_topic)
+lda_doc_topics = np.array(lda_doc_topics)
+lda_3d = lda_doc_topics[:, :3]
+plot_interactive(lda_3d, "LDA - 3D Document-Topic Probability Space", "Topic 1 prob", "Topic 2 prob", "Topic 3 prob")
+
+print("\nAll 5 interactive scatter plots generated successfully.")
